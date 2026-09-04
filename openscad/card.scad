@@ -18,7 +18,9 @@
 // in the Customizer to preview/export each body individually.
 // ============================================================
 
-include <qr_data.scad>  // provides qr_matrix (53x53) + qr_modules, encodes Lloyd's vCard
+// The QR itself is not part of this model — see the qr_shape() comment
+// below for why, and sticker.py for the separately-printed QR graphic
+// that gets applied into the pocket qr_shape() leaves for it.
 
 /* [Part selection] */
 // Which body to render: "all" (preview only), "base", "red", "white"
@@ -60,34 +62,22 @@ module rounded_rect(w, h, r) {
     }
 }
 
-// QR code as a 2D shape, drawn with lower-left corner at [0,0],
-// occupying size x size mm. A QR scanner needs standard polarity —
-// dark modules on a light field, including a light quiet zone — so
-// this is the WHITE body: a solid square (light modules + quiet
-// zone) with the dark modules punched out, leaving the black base
-// showing through as the "dark module" color.
+// QR pocket, drawn with lower-left corner at [0,0], size x size mm.
+//
+// An earlier version punched every individual dark module as a hole in
+// this square, i.e. tried to print the actual QR pattern in two colors.
+// That doesn't work on an AMS: a 53x53-module code needs ~2800 filament
+// swaps within one small area, most of them between diagonally-touching
+// modules that leave slivers of material far thinner than a nozzle width.
+// The slicer can't resolve that and drops most of it — confirmed on a
+// real print (sparse white noise instead of a dense QR pattern).
+//
+// So this is now a plain solid pocket: one flat color-swap region like
+// the text, fully AMS-friendly. The actual QR pattern is printed
+// separately as an adhesive sticker (see sticker.py) sized to this
+// pocket and applied after printing — see the README.
 module qr_shape(size) {
-    quiet = 3; // modules of quiet zone (spec recommends 4; 3 still scans reliably and buys back module size)
-    total_modules = qr_modules + 2 * quiet;
-    module_size = size / total_modules;
-    // adjacent holes share exact edges, which trips up CGAL's manifold
-    // check (many thousands of coincident edges); nudge every hole to
-    // overlap its neighbors by a hair so there are no shared edges left.
-    eps = module_size * 0.06;
-    difference() {
-        square([size, size]);
-        for (row = [0 : qr_modules - 1]) {
-            for (col = [0 : qr_modules - 1]) {
-                if (qr_matrix[row][col] == 1) {
-                    translate([
-                        (col + quiet) * module_size - eps / 2,
-                        (qr_modules - 1 - row + quiet) * module_size - eps / 2
-                    ])
-                    square([module_size + eps, module_size + eps]);
-                }
-            }
-        }
-    }
+    square([size, size]);
 }
 
 // ---------- layout (all coordinates in mm, origin = bottom-left of card) ----------
@@ -110,9 +100,10 @@ org_size     = 2.3;
 logo_size    = 8.0;
 caption_size = 2.3;
 
-qr_size = 24.0; // 24mm / 59 total modules (53 data + 3 quiet zone each side) = ~0.41mm/module, just above a 0.4mm nozzle's reliable minimum feature size
+qr_size = 24.0; // sticker pocket size in mm — see sticker.py for the matching printable QR graphic
 qr_x = card_w - margin_r - qr_size;
 qr_y = card_h - margin_top - qr_size;
+sticker_depth = 0.15; // recess depth for the QR pocket, ~1 sheet of adhesive label stock, so the applied sticker sits flush
 
 module red_shape_2d() {
     // "LLOYD MERCHANT" — top line
@@ -150,10 +141,6 @@ module white_shape_2d() {
     translate([margin_l, phone_baseline])
         bold_text("(540) 853-5304", size = org_size);
 
-    // QR code
-    translate([qr_x, qr_y])
-        qr_shape(qr_size);
-
     // caption under QR, centered under the QR block
     cap_cx = qr_x + qr_size / 2;
     cap_line1_baseline = qr_y - 2.2 - caption_size * cap_frac;
@@ -173,12 +160,18 @@ module base_outline_2d() {
 module black_part() {
     difference() {
         linear_extrude(height = card_t) base_outline_2d();
+        // color-swap band: name/title/org/phone/RESET/caption
         translate([0, 0, card_t - top_layer])
             linear_extrude(height = top_layer + 0.02)
                 union() {
                     red_shape_2d();
                     white_shape_2d();
                 }
+        // separate, shallower QR sticker pocket (left bare — a printed
+        // adhesive label goes here after printing, see sticker.py)
+        translate([qr_x, qr_y, card_t - sticker_depth])
+            linear_extrude(height = sticker_depth + 0.02)
+                qr_shape(qr_size);
     }
 }
 

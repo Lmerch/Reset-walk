@@ -6,41 +6,42 @@ flush 3mm-thick card:
 
 | File              | Color | Content                                                                 |
 |--------------------|-------|--------------------------------------------------------------------------|
-| `card_base.stl`    | Black | The card body, with the red/white artwork recessed 0.8mm into the top   |
+| `card_base.stl`    | Black | The card body, with the red/white artwork recessed 0.8mm into the top, plus a shallow 0.15mm QR sticker pocket |
 | `card_red.stl`     | Red   | Name, divider line, "RESET" wordmark                                    |
-| `card_white.stl`   | White | Title, department, phone, QR code, "SCAN TO SAVE CONTACT"               |
+| `card_white.stl`   | White | Title, department, phone, "SCAN TO SAVE CONTACT"                        |
 
 All three share the same coordinate system and were verified to be
 watertight and mutually non-overlapping (their volumes sum exactly to the
-rounded-rectangle card volume) — so they combine into one solid card with no
-gaps or interference.
+card volume minus the QR pocket) — so they combine into one solid card with
+no gaps or interference.
 
-## QR code
+## The QR code is a separate applied sticker, not printed in color
 
-The QR code encodes a vCard for Lloyd Merchant (name, title, department,
-phone) generated from `qr_data.scad`. Scanning it saves the contact
-directly, matching the "SCAN TO SAVE CONTACT" caption. To change the
-encoded data (e.g. add an email or website), regenerate `qr_data.scad`:
+The first version tried to print the actual QR pattern (53x53 modules) in
+two AMS filament colors, like the text. **That doesn't work**: it requires
+~2800 filament swaps within one small area, most of them between
+diagonally-touching modules, which leaves slivers of material far thinner
+than a 0.4mm nozzle can resolve. A real print confirmed this — sparse white
+noise instead of a dense QR pattern, illegible to any scanner.
+
+So the 3D-printed card now only has a **plain, bare 0.15mm pocket** where
+the QR goes (fully AMS-friendly — one flat color-swap region, same as the
+text). The actual QR is printed separately and applied as a sticker:
 
 ```bash
-python3 -c "
-import qrcode
-vcard = '\r\n'.join([
-    'BEGIN:VCARD','VERSION:3.0','N:Merchant;Lloyd;;;','FN:Lloyd Merchant',
-    'TITLE:Community Mitigation & Volunteer Coordinator',
-    'ORG:Roanoke Police Department','TEL;TYPE=WORK,VOICE:(540) 853-5304',
-    'END:VCARD',
-])
-qr = qrcode.QRCode(version=None, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=1, border=0)
-qr.add_data(vcard); qr.make(fit=True)
-m = qr.get_matrix(); n = len(m)
-lines = [f'qr_modules = {n};', 'qr_matrix = [']
-lines += ['  [' + ','.join('1' if v else '0' for v in row) + '],' for row in m]
-lines.append('];')
-open('qr_data.scad','w').write('\n'.join(lines) + '\n')
-"
+pip install qrcode
+python3 sticker.py
 ```
-(`pip install qrcode` if needed.) Then re-run `./build.sh`.
+
+This writes `sticker.svg` (vector, exact 24x24mm — print this for best
+results) and `sticker.png` (high-res raster preview/fallback). Print it on
+adhesive label paper at 100% scale / "actual size" (don't let your print
+dialog "fit to page"), cut along the 24x24mm square, and stick it into the
+card's QR pocket after printing. The pocket is 0.15mm deep so a typical
+label sheet sits flush with the surrounding surface.
+
+To change the encoded data (e.g. add an email or website), edit the
+`vcard` block near the top of `sticker.py` and rerun it.
 
 ## Regenerating the STLs
 
@@ -62,13 +63,17 @@ preview/export each body, or leave it on `all` for a full-color preview.
 3. Select each object in the object list and assign it a filament/AMS slot:
    `card_base.stl` -> black, `card_red.stl` -> red, `card_white.stl` -> white.
 4. Slice as a single plate. Bambu Studio will purge/swap filament within
-   each layer of the top 0.8mm band to print the flush multi-color surface.
+   each layer of the top 0.8mm band to print the flush multi-color text
+   surface (the QR pocket is single-color, no swaps needed there).
 5. Recommended print settings: 0.4mm nozzle, 0.2mm layer height (the 0.8mm
    color band = 4 layers), 2-3 walls, 100% infill (card is thin/solid — no
    real benefit to sparse infill), no supports needed (flat, no overhangs).
    In Bambu Studio, also enable **Advanced > Detect thin walls** — this
-   design leans on it for the small text and QR modules to come out solid
-   instead of getting skipped as sub-perimeter-width features.
+   design leans on it for the small text to come out solid instead of
+   getting skipped as sub-perimeter-width features.
+6. After printing, apply the QR sticker from `sticker.py`/`sticker.svg`
+   into the recessed pocket (top-right, where the QR was on the reference
+   design).
 
 ### Why the small text vanished at first, and how it's fixed now
 
@@ -81,35 +86,23 @@ slicer's thin-wall handling dropped or fused them. Two fixes are baked into
   `offset(delta = stroke_fatten)` (0.13mm) to fatten every stroke by ~0.26mm
   total before it's cut/extruded — checked by rendering a close-up top-down
   crop to confirm letters (esp. counters in O/A/R/&) stayed open and
-  didn't fuse together.
+  didn't fuse together. Confirmed on a real print: text came out crisp.
 - The title/department/caption font sizes were bumped up (title 2.3→2.6mm,
   department 2.2→2.3mm, caption 2.1→2.3mm) within the space freed up by
-  trimming the QR's quiet zone from 4 to 3 modules and margin_r from 4.0 to
-  3.0mm.
+  trimming margin_r from 4.0 to 3.0mm.
 
 If letters still come out faint or broken after slicing with "Detect thin
 walls" on, raise `stroke_fatten` (try 0.18-0.20) and/or the individual
 `*_size` variables further, re-render, and re-check clearance against the
-QR before reprinting.
-
-### A note on QR print resolution
-
-The QR is 53x53 modules + a 3-module quiet zone, sized to 24mm, so each
-module is ~0.41mm — just above the reliable minimum feature size for a
-0.4mm nozzle. If it doesn't scan reliably off the printer:
-- Try a 0.2mm nozzle if you have one, or
-- Increase `qr_size` in `card.scad` (and shrink other text a bit to keep
-  clearances, matching what `build.sh`/the Customizer already validates via
-  render), or
-- Shorten the vCard data (e.g. drop `TITLE`) to drop the QR to a lower
-  version with fewer modules.
+QR pocket before reprinting.
 
 ## Adjusting the design
 
-All layout constants (margins, font sizes, QR size, card dimensions,
-recess depth) are declared near the top of `card.scad` with comments. Text
-width can't be queried in this OpenSCAD version (2021.01), so sizes were
-tuned by rendering and eyeballing clearance against the QR code and card
-edges — if you change any text, re-render (`openscad -o preview.png
---viewall --autocenter --projection=ortho card.scad`) and check for overlap
-before printing.
+All layout constants (margins, font sizes, QR pocket size/depth, card
+dimensions, recess depth) are declared near the top of `card.scad` with
+comments. Text width can't be queried in this OpenSCAD version (2021.01),
+so sizes were tuned by rendering and eyeballing clearance against the QR
+pocket and card edges — if you change any text, re-render (`openscad -o
+preview.png --viewall --autocenter --projection=ortho card.scad`) and check
+for overlap before printing. If you resize the QR pocket (`qr_size` in
+`card.scad`), update `QR_SIZE_MM` in `sticker.py` to match.
