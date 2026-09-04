@@ -66,10 +66,35 @@ preview/export each body, or leave it on `all` for a full-color preview.
 5. Recommended print settings: 0.4mm nozzle, 0.2mm layer height (the 0.8mm
    color band = 4 layers), 2-3 walls, 100% infill (card is thin/solid — no
    real benefit to sparse infill), no supports needed (flat, no overhangs).
+   In Bambu Studio, also enable **Advanced > Detect thin walls** — this
+   design leans on it for the small text and QR modules to come out solid
+   instead of getting skipped as sub-perimeter-width features.
+
+### Why the small text vanished at first, and how it's fixed now
+
+The first version's title/department text sized letters directly off cap
+height (e.g. a 2.2mm cap height), which gives bold sans strokes only
+~0.35mm wide — thinner than a 0.4mm nozzle can reliably lay down, so the
+slicer's thin-wall handling dropped or fused them. Two fixes are baked into
+`card.scad` now:
+- Every piece of text goes through the `bold_text()` helper, which applies
+  `offset(delta = stroke_fatten)` (0.13mm) to fatten every stroke by ~0.26mm
+  total before it's cut/extruded — checked by rendering a close-up top-down
+  crop to confirm letters (esp. counters in O/A/R/&) stayed open and
+  didn't fuse together.
+- The title/department/caption font sizes were bumped up (title 2.3→2.6mm,
+  department 2.2→2.3mm, caption 2.1→2.3mm) within the space freed up by
+  trimming the QR's quiet zone from 4 to 3 modules and margin_r from 4.0 to
+  3.0mm.
+
+If letters still come out faint or broken after slicing with "Detect thin
+walls" on, raise `stroke_fatten` (try 0.18-0.20) and/or the individual
+`*_size` variables further, re-render, and re-check clearance against the
+QR before reprinting.
 
 ### A note on QR print resolution
 
-The QR is 53x53 modules + a 4-module quiet zone, sized to 25mm, so each
+The QR is 53x53 modules + a 3-module quiet zone, sized to 24mm, so each
 module is ~0.41mm — just above the reliable minimum feature size for a
 0.4mm nozzle. If it doesn't scan reliably off the printer:
 - Try a 0.2mm nozzle if you have one, or
