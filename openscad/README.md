@@ -106,3 +106,28 @@ pocket and card edges — if you change any text, re-render (`openscad -o
 preview.png --viewall --autocenter --projection=ortho card.scad`) and check
 for overlap before printing. If you resize the QR pocket (`qr_size` in
 `card.scad`), update `QR_SIZE_MM` in `sticker.py` to match.
+
+## Testing settings changes on a small swatch first
+
+Re-printing the whole card to test each settings tweak is slow. Two small
+diagnostic coupons are cropped straight out of the real design so you can
+test in a few minutes instead:
+
+| Files                                   | What it tests                                          |
+|-------------------------------------------|---------------------------------------------------------|
+| `swatch1_base.stl` + `swatch1_red.stl`    | "RESET" in red — large letters, few islands/travels     |
+| `swatch2_base.stl` + `swatch2_white.stl`  | title/org/phone in white — small letters, many islands  |
+
+Print each pair together (same as the full card: same saved position, one
+AMS slot each). If stray specks show up on both swatches equally, it's a
+general travel/retraction/Z-hop setting, not something specific to the fine
+text — fix the settings once and reprint the full card. If they only show
+up on swatch2, island density is the driver and the fine text may need to
+get simplified/enlarged further, or you may need a smaller nozzle after all.
+
+Regenerate them (e.g. after changing the design) via:
+```bash
+for p in swatch1_base swatch1_red swatch2_base swatch2_white; do
+    openscad -D "part=\"$p\"" -o "$p.stl" --export-format=binstl card.scad
+done
+```

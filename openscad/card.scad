@@ -23,8 +23,9 @@
 // that gets applied into the pocket qr_shape() leaves for it.
 
 /* [Part selection] */
-// Which body to render: "all" (preview only), "base", "red", "white"
-part = "all"; // [all, base, red, white]
+// Which body to render: "all" (preview only), "base", "red", "white",
+// or one of the small diagnostic swatches (see the swatch section below)
+part = "all"; // [all, base, red, white, swatch1_base, swatch1_red, swatch2_base, swatch2_white]
 
 /* [Card dimensions, mm] */
 card_w = 85.6;      // ISO/credit-card width
@@ -193,6 +194,44 @@ module white_part() {
             }
 }
 
+// ---------- diagnostic swatches ----------
+//
+// Small coupons cropped out of the real design, for testing print
+// settings (retraction, Z-hop, travel speed, nozzle...) in a few
+// minutes instead of re-printing the whole card each time. Two are
+// provided to separate two possible causes of stray specks:
+//   - swatch1: "RESET" in red — large letters, few islands/travels
+//   - swatch2: title/org/phone in white — small letters, many islands
+// If specks show up on both equally, it's a general travel/retraction
+// setting, not specific to the fine text. Print each swatch's base +
+// color pair together (same as the full card: same position, one AMS
+// slot each).
+
+module crop_box_3d(x0, y0, x1, y1) {
+    translate([x0, y0, -1])
+        cube([x1 - x0, y1 - y0, card_t + 2]);
+}
+
+swatch1_box = [3.5, 2, 42, 15];   // around "RESET"
+swatch2_box = [2, 24, 50, 42];    // around title/org/phone
+
+module swatch1_base() {
+    translate([-swatch1_box[0], -swatch1_box[1], 0])
+        intersection() { black_part(); crop_box_3d(swatch1_box[0], swatch1_box[1], swatch1_box[2], swatch1_box[3]); }
+}
+module swatch1_red() {
+    translate([-swatch1_box[0], -swatch1_box[1], 0])
+        intersection() { red_part(); crop_box_3d(swatch1_box[0], swatch1_box[1], swatch1_box[2], swatch1_box[3]); }
+}
+module swatch2_base() {
+    translate([-swatch2_box[0], -swatch2_box[1], 0])
+        intersection() { black_part(); crop_box_3d(swatch2_box[0], swatch2_box[1], swatch2_box[2], swatch2_box[3]); }
+}
+module swatch2_white() {
+    translate([-swatch2_box[0], -swatch2_box[1], 0])
+        intersection() { white_part(); crop_box_3d(swatch2_box[0], swatch2_box[1], swatch2_box[2], swatch2_box[3]); }
+}
+
 // ---------- output selection ----------
 
 if (part == "base") {
@@ -201,6 +240,14 @@ if (part == "base") {
     color("red") red_part();
 } else if (part == "white") {
     color("white") white_part();
+} else if (part == "swatch1_base") {
+    color("black") swatch1_base();
+} else if (part == "swatch1_red") {
+    color("#c81e2c") swatch1_red();
+} else if (part == "swatch2_base") {
+    color("black") swatch2_base();
+} else if (part == "swatch2_white") {
+    color("white") swatch2_white();
 } else {
     color("black") black_part();
     color("#c81e2c") red_part();
