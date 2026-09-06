@@ -36,7 +36,6 @@ top_layer = 0.8;    // depth of the color-swap zone at the top surface (multiple
 
 /* [Typography] */
 font_bold = "Liberation Sans:style=Bold";
-font_reg  = "Liberation Sans:style=Regular";
 
 // At small point sizes, bold sans caps produce strokes thinner than a
 // 0.4mm nozzle reliably prints (a 2.2mm cap height is only ~0.35mm
@@ -88,34 +87,38 @@ module qr_shape(size) {
 // Liberation Sans Bold), and each row advances from the previous baseline.
 // Font-metric queries aren't available in this OpenSCAD version, so sizes
 // were chosen conservatively for character count and confirmed by render.
+//
+// Pared down from the original design (name/title/department/phone/QR) to
+// just name + logo + QR: all contact details live in the QR's vCard now,
+// so the card doesn't need to repeat them in print, and fewer/bigger text
+// islands are also far more reliable to print in color via AMS.
 
 margin_l = 5.5;
-margin_r = 3.0;
+margin_r = 4.0;
 margin_top = 5.0;
 margin_bottom = 4.5;
 cap_frac = 0.75;
 
-name_size    = 4.2;
-title_size   = 2.6;
-org_size     = 2.3;
-logo_size    = 8.0;
-caption_size = 2.3;
+name_size    = 5.9;
+logo_size    = 10.0;
+caption_size = 3.0;
 
-qr_size = 24.0; // sticker pocket size in mm — see sticker.py for the matching printable QR graphic
+qr_size = 27.0; // sticker pocket size in mm — see sticker.py for the matching printable QR graphic
 qr_x = card_w - margin_r - qr_size;
-qr_y = card_h - margin_top - qr_size;
+qr_y = 36.05 - qr_size; // hangs from just under the divider — see white_shape_2d
 sticker_depth = 0.15; // recess depth for the QR pocket, ~1 sheet of adhesive label stock, so the applied sticker sits flush
 
 module red_shape_2d() {
-    // "LLOYD MERCHANT" — top line
+    // "LLOYD MERCHANT" — top line, spans most of the card width now that
+    // nothing else shares this row
     name_baseline = card_h - margin_top - name_size * cap_frac;
     translate([margin_l, name_baseline])
         bold_text("LLOYD MERCHANT", size = name_size);
 
-    // divider line under the name
+    // divider accent under the name
     divider_y = name_baseline - name_size * 0.35 - 1.8;
     translate([margin_l, divider_y])
-        square([26, 0.6]);
+        square([34, 0.6]);
 
     // "RESET" wordmark, bottom-left
     reset_baseline = margin_bottom + 1.0;
@@ -124,32 +127,11 @@ module red_shape_2d() {
 }
 
 module white_shape_2d() {
-    name_baseline = card_h - margin_top - name_size * cap_frac;
-    divider_y = name_baseline - name_size * 0.35 - 1.8;
-
-    // job title, two lines
-    line1_baseline = divider_y - 2.6 - title_size * cap_frac;
-    translate([margin_l, line1_baseline])
-        bold_text("COMMUNITY MITIGATION &", size = title_size);
-    line2_baseline = line1_baseline - title_size * 1.45;
-    translate([margin_l, line2_baseline])
-        bold_text("VOLUNTEER COORDINATOR", size = title_size);
-
-    org_baseline = line2_baseline - title_size * 0.9 - org_size * cap_frac;
-    translate([margin_l, org_baseline])
-        bold_text("ROANOKE POLICE DEPARTMENT", size = org_size);
-    phone_baseline = org_baseline - org_size * 1.55;
-    translate([margin_l, phone_baseline])
-        bold_text("(540) 853-5304", size = org_size);
-
-    // caption under QR, centered under the QR block
+    // caption under the QR, centered under the QR block
     cap_cx = qr_x + qr_size / 2;
-    cap_line1_baseline = qr_y - 2.2 - caption_size * cap_frac;
-    translate([cap_cx, cap_line1_baseline])
-        bold_text("SCAN TO SAVE", size = caption_size, halign = "center");
-    cap_line2_baseline = cap_line1_baseline - caption_size * 1.45;
-    translate([cap_cx, cap_line2_baseline])
-        bold_text("CONTACT", size = caption_size, halign = "center");
+    cap_baseline = qr_y - 2.0 - caption_size * cap_frac;
+    translate([cap_cx, cap_baseline])
+        bold_text("SCAN ME", size = caption_size, halign = "center");
 }
 
 // ---------- solid bodies ----------
@@ -199,21 +181,21 @@ module white_part() {
 // Small coupons cropped out of the real design, for testing print
 // settings (retraction, Z-hop, travel speed, nozzle...) in a few
 // minutes instead of re-printing the whole card each time. Two are
-// provided to separate two possible causes of stray specks:
-//   - swatch1: "RESET" in red — large letters, few islands/travels
-//   - swatch2: title/org/phone in white — small letters, many islands
+// provided:
+//   - swatch1: "RESET" in red — big bold letters
+//   - swatch2: QR pocket + "SCAN ME" caption in white — the only
+//     remaining white content since the design was pared down
 // If specks show up on both equally, it's a general travel/retraction
-// setting, not specific to the fine text. Print each swatch's base +
-// color pair together (same as the full card: same position, one AMS
-// slot each).
+// setting. Print each swatch's base + color pair together (same as the
+// full card: same position, one AMS slot each).
 
 module crop_box_3d(x0, y0, x1, y1) {
     translate([x0, y0, -1])
         cube([x1 - x0, y1 - y0, card_t + 2]);
 }
 
-swatch1_box = [3.5, 2, 42, 15];   // around "RESET"
-swatch2_box = [2, 24, 50, 42];    // around title/org/phone
+swatch1_box = [3, 3, 52, 15];    // around "RESET"
+swatch2_box = [52, 3, 84, 38];   // around the QR pocket + "SCAN ME"
 
 module swatch1_base() {
     translate([-swatch1_box[0], -swatch1_box[1], 0])

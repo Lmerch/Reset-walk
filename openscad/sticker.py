@@ -14,10 +14,12 @@ Requires: pip install qrcode
 Outputs: sticker.svg (vector, exact mm size — print this) and
          sticker.png (high-res raster preview)
 """
+import re
+
 import qrcode
 import qrcode.image.svg
 
-QR_SIZE_MM = 24.0  # must match qr_size in card.scad
+QR_SIZE_MM = 27.0  # must match qr_size in card.scad
 
 vcard = "\r\n".join([
     "BEGIN:VCARD",
@@ -43,23 +45,36 @@ qr.make(fit=True)
 modules = len(qr.get_matrix())
 
 # Vector output at the exact physical size, for crisp printing at any DPI.
-factory = qrcode.image.svg.SvgPathImage
+# SvgPathFillImage (not plain SvgPathImage) adds an opaque white background
+# rect — without it the "light" modules are just transparent, which looks
+# fine in most viewers (transparency shows through as whatever's behind
+# it) but rasterizes with alpha=0 there, not actual white pixels: a QR
+# scanner reading that composited/flattened image sees no light/dark
+# contrast at all and fails to decode. Confirmed broken with plain
+# SvgPathImage (pyzbar/opencv both failed on a rasterized render) and
+# confirmed fixed below with this class instead.
+factory = qrcode.image.svg.SvgPathFillImage
 svg_img = qr.make_image(image_factory=factory)
 svg_img.save("sticker.svg")
 
-# Fix up the SVG to be exactly QR_SIZE_MM x QR_SIZE_MM (qrcode's SVG
-# factory sizes in its own units by default) and raster preview.
+# Force the SVG to exactly QR_SIZE_MM x QR_SIZE_MM. qrcode's SvgPathImage
+# picks its own internal width/height (NOT "{modules}mm" as you'd expect —
+# e.g. it rendered "6.5mm" for a 65-module code), and the viewBox already
+# matches that internal coordinate system, so only width/height need
+# overriding — the SVG scales its contents to whatever physical size those
+# attributes declare. Match whatever value is actually there rather than
+# assuming one, so this can't silently no-op again like it did before.
 with open("sticker.svg") as f:
     svg = f.read()
-svg = svg.replace(
-    f'width="{modules}mm" height="{modules}mm"',
-    f'width="{QR_SIZE_MM}mm" height="{QR_SIZE_MM}mm"',
-)
+svg, n = re.subn(r'width="[^"]*" height="[^"]*"',
+                  f'width="{QR_SIZE_MM}mm" height="{QR_SIZE_MM}mm"', svg, count=1)
+assert n == 1, "sticker.svg's width/height attributes weren't found to replace"
 with open("sticker.svg", "w") as f:
     f.write(svg)
 
 png_img = qr.make_image(fill_color="black", back_color="white")
-png_img = png_img.resize((944, 944))  # ~1000dpi at 24mm, sharp for preview/cutting reference
+px = round(QR_SIZE_MM / 25.4 * 1000)  # ~1000dpi, sharp for preview/cutting reference
+png_img = png_img.resize((px, px))
 png_img.save("sticker.png")
 
 print(f"QR version {qr.version}, {modules}x{modules} modules, "
