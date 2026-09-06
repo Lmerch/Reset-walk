@@ -18,9 +18,13 @@
 // in the Customizer to preview/export each body individually.
 // ============================================================
 
-// The QR itself is not part of this model — see the qr_shape() comment
-// below for why, and sticker.py for the separately-printed QR graphic
-// that gets applied into the pocket qr_shape() leaves for it.
+// The QR is printed directly in two colors (white background, black
+// modules) — see the qr_shape() comment below. An earlier revision
+// replaced this with a plain pocket + separately-printed sticker because
+// this seemed unreliable on an AMS; a real print with tuned retraction/
+// Z-hop/travel-speed settings (see README) proved it actually works, so
+// it's back.
+include <qr_data.scad>  // provides qr_matrix + qr_modules, encodes Lloyd's vCard
 
 /* [Part selection] */
 // Which body to render: "all" (preview only), "base", "red", "white",
@@ -42,8 +46,11 @@ font_bold = "Liberation Sans:style=Bold";
 // stroke), so the slicer's thin-wall handling can drop or fuse them —
 // this showed up as illegible letters after slicing. Fattening every
 // glyph outward by this amount (added to both edges of every stroke)
-// fixes that without redrawing the whole layout.
-stroke_fatten = 0.13;
+// fixes that without redrawing the whole layout. Widened from 0.13 to
+// 0.18 after a real print still showed a few letters printing wrong —
+// neither the exact letters nor the cause were pinned down, so this is
+// a broader safety margin rather than a targeted fix.
+stroke_fatten = 0.18;
 
 $fn = 48;
 
@@ -62,22 +69,34 @@ module rounded_rect(w, h, r) {
     }
 }
 
-// QR pocket, drawn with lower-left corner at [0,0], size x size mm.
-//
-// An earlier version punched every individual dark module as a hole in
-// this square, i.e. tried to print the actual QR pattern in two colors.
-// That doesn't work on an AMS: a 53x53-module code needs ~2800 filament
-// swaps within one small area, most of them between diagonally-touching
-// modules that leave slivers of material far thinner than a nozzle width.
-// The slicer can't resolve that and drops most of it — confirmed on a
-// real print (sparse white noise instead of a dense QR pattern).
-//
-// So this is now a plain solid pocket: one flat color-swap region like
-// the text, fully AMS-friendly. The actual QR pattern is printed
-// separately as an adhesive sticker (see sticker.py) sized to this
-// pocket and applied after printing — see the README.
+// QR code as a 2D shape, drawn with lower-left corner at [0,0],
+// occupying size x size mm. A QR scanner needs standard polarity —
+// dark modules on a light field, including a light quiet zone — so
+// this is the WHITE body: a solid square (light modules + quiet
+// zone) with the dark modules punched out, leaving the black base
+// showing through as the "dark module" color.
 module qr_shape(size) {
-    square([size, size]);
+    quiet = 4; // modules of quiet zone (spec-recommended, no need to skimp now this actually prints reliably)
+    total_modules = qr_modules + 2 * quiet;
+    module_size = size / total_modules;
+    // adjacent holes share exact edges, which trips up CGAL's manifold
+    // check (many thousands of coincident edges); nudge every hole to
+    // overlap its neighbors by a hair so there are no shared edges left.
+    eps = module_size * 0.06;
+    difference() {
+        square([size, size]);
+        for (row = [0 : qr_modules - 1]) {
+            for (col = [0 : qr_modules - 1]) {
+                if (qr_matrix[row][col] == 1) {
+                    translate([
+                        (col + quiet) * module_size - eps / 2,
+                        (qr_modules - 1 - row + quiet) * module_size - eps / 2
+                    ])
+                    square([module_size + eps, module_size + eps]);
+                }
+            }
+        }
+    }
 }
 
 // ---------- layout (all coordinates in mm, origin = bottom-left of card) ----------
@@ -103,10 +122,9 @@ name_size    = 5.9;
 logo_size    = 10.0;
 caption_size = 3.0;
 
-qr_size = 27.0; // sticker pocket size in mm — see sticker.py for the matching printable QR graphic
+qr_size = 27.0; // 27mm / 61 total modules (53 data + 4 quiet zone each side) = ~0.44mm/module
 qr_x = card_w - margin_r - qr_size;
 qr_y = 36.05 - qr_size; // hangs from just under the divider — see white_shape_2d
-sticker_depth = 0.15; // recess depth for the QR pocket, ~1 sheet of adhesive label stock, so the applied sticker sits flush
 
 module red_shape_2d() {
     // "LLOYD MERCHANT" — top line, spans most of the card width now that
@@ -127,6 +145,10 @@ module red_shape_2d() {
 }
 
 module white_shape_2d() {
+    // QR code
+    translate([qr_x, qr_y])
+        qr_shape(qr_size);
+
     // caption under the QR, centered under the QR block
     cap_cx = qr_x + qr_size / 2;
     cap_baseline = qr_y - 2.0 - caption_size * cap_frac;
@@ -143,18 +165,13 @@ module base_outline_2d() {
 module black_part() {
     difference() {
         linear_extrude(height = card_t) base_outline_2d();
-        // color-swap band: name/title/org/phone/RESET/caption
+        // color-swap band: name/RESET/QR/caption, all in one flat recess
         translate([0, 0, card_t - top_layer])
             linear_extrude(height = top_layer + 0.02)
                 union() {
                     red_shape_2d();
                     white_shape_2d();
                 }
-        // separate, shallower QR sticker pocket (left bare — a printed
-        // adhesive label goes here after printing, see sticker.py)
-        translate([qr_x, qr_y, card_t - sticker_depth])
-            linear_extrude(height = sticker_depth + 0.02)
-                qr_shape(qr_size);
     }
 }
 
