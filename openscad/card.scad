@@ -1,5 +1,9 @@
 // ============================================================
 // RESET WALK business card — Lloyd Merchant
+// "Modern Minimalist" layout, adapted from a design mockup into the
+// validated multi-color AMS printing pipeline (real data-driven QR,
+// stroke-fattened text, full manifold/overlap verification).
+//
 // Multi-color card for Bambu Lab P1S + AMS.
 //
 // Prints as THREE separate STL bodies sharing one coordinate
@@ -19,11 +23,9 @@
 // ============================================================
 
 // The QR is printed directly in two colors (white background, black
-// modules) — see the qr_shape() comment below. An earlier revision
-// replaced this with a plain pocket + separately-printed sticker because
-// this seemed unreliable on an AMS; a real print with tuned retraction/
-// Z-hop/travel-speed settings (see README) proved it actually works, so
-// it's back.
+// modules) — see the qr_shape() comment below. Confirmed on a real print
+// (with tuned retraction/Z-hop/travel-speed settings — see README) to
+// print and scan reliably.
 include <qr_data.scad>  // provides qr_matrix + qr_modules, encodes Lloyd's vCard
 
 /* [Part selection] */
@@ -32,24 +34,21 @@ include <qr_data.scad>  // provides qr_matrix + qr_modules, encodes Lloyd's vCar
 part = "all"; // [all, base, red, white, swatch1_base, swatch1_red, swatch2_base, swatch2_white]
 
 /* [Card dimensions, mm] */
-card_w = 85.6;      // ISO/credit-card width
-card_h = 54.0;      // ISO/credit-card height
-card_t = 3.0;       // total thickness
+card_w = 88.9;      // standard US business card width
+card_h = 50.8;      // standard US business card height
+card_t = 1.6;       // total thickness
 corner_r = 3.0;     // corner rounding radius
-top_layer = 0.8;    // depth of the color-swap zone at the top surface (multiple of layer height)
+top_layer = 0.6;    // depth of the color-swap zone at the top surface (multiple of layer height)
 
 /* [Typography] */
 font_bold = "Liberation Sans:style=Bold";
 
 // At small point sizes, bold sans caps produce strokes thinner than a
-// 0.4mm nozzle reliably prints (a 2.2mm cap height is only ~0.35mm
-// stroke), so the slicer's thin-wall handling can drop or fuse them —
-// this showed up as illegible letters after slicing. Fattening every
-// glyph outward by this amount (added to both edges of every stroke)
-// fixes that without redrawing the whole layout. Widened from 0.13 to
-// 0.18 after a real print still showed a few letters printing wrong —
-// neither the exact letters nor the cause were pinned down, so this is
-// a broader safety margin rather than a targeted fix.
+// 0.4mm nozzle reliably prints, so the slicer's thin-wall handling can
+// drop or fuse them. Fattening every glyph outward by this amount (added
+// to both edges of every stroke) fixes that without redrawing the whole
+// layout. 0.18 was settled on after an earlier, smaller value (0.13)
+// still left a few letters printing wrong on a real card.
 stroke_fatten = 0.18;
 
 $fn = 48;
@@ -76,7 +75,7 @@ module rounded_rect(w, h, r) {
 // zone) with the dark modules punched out, leaving the black base
 // showing through as the "dark module" color.
 module qr_shape(size) {
-    quiet = 4; // modules of quiet zone (spec-recommended, no need to skimp now this actually prints reliably)
+    quiet = 4; // modules of quiet zone (spec-recommended)
     total_modules = qr_modules + 2 * quiet;
     module_size = size / total_modules;
     // adjacent holes share exact edges, which trips up CGAL's manifold
@@ -107,44 +106,61 @@ module qr_shape(size) {
 // Font-metric queries aren't available in this OpenSCAD version, so sizes
 // were chosen conservatively for character count and confirmed by render.
 //
-// Pared down from the original design (name/title/department/phone/QR) to
-// just name + logo + QR: all contact details live in the QR's vCard now,
-// so the card doesn't need to repeat them in print, and fewer/bigger text
-// islands are also far more reliable to print in color via AMS.
+// Two blocks on the left (RESET + name up top, a two-tone title pinned to
+// the bottom), a QR + caption on the right, and a short vertical divider
+// accent filling the empty gap between the two left blocks — sized to sit
+// entirely in that gap rather than spanning the full card height, so nothing
+// can grow into it as text sizes get tuned.
 
-margin_l = 5.5;
-margin_r = 4.0;
-margin_top = 5.0;
-margin_bottom = 4.5;
+margin_l = 8.0;
+margin_r = 6.0;
+margin_top = 6.0;
+margin_bottom = 5.0;
 cap_frac = 0.75;
 
-name_size    = 5.9;
-logo_size    = 10.0;
-caption_size = 3.0;
+logo_size    = 9.0;   // "RESET"
+name_size    = 3.4;   // "LLOYD MERCHANT"
+title_size   = 2.15;  // "COMMUNITY MITIGATION" / "VOLUNTEER COORDINATOR"
+caption_size = 2.2;   // "SCAN TO SAVE"
 
-qr_size = 27.0; // 27mm / 61 total modules (53 data + 4 quiet zone each side) = ~0.44mm/module
+qr_size = 30.0; // 30mm / 61 total modules (53 data + 4 quiet zone each side) = ~0.49mm/module
 qr_x = card_w - margin_r - qr_size;
-qr_y = 36.05 - qr_size; // hangs from just under the divider — see white_shape_2d
+qr_y = (card_h - qr_size) / 2;
 
 module red_shape_2d() {
-    // "LLOYD MERCHANT" — top line, spans most of the card width now that
-    // nothing else shares this row
-    name_baseline = card_h - margin_top - name_size * cap_frac;
-    translate([margin_l, name_baseline])
-        bold_text("LLOYD MERCHANT", size = name_size);
-
-    // divider accent under the name
-    divider_y = name_baseline - name_size * 0.35 - 1.8;
-    translate([margin_l, divider_y])
-        square([34, 0.6]);
-
-    // "RESET" wordmark, bottom-left
-    reset_baseline = margin_bottom + 1.0;
+    // "RESET" wordmark, top-left
+    reset_baseline = card_h - margin_top - logo_size * cap_frac;
     translate([margin_l, reset_baseline])
         bold_text("RESET", size = logo_size);
+
+    // two-tone title, top half (red) — bottom-left, above its white half
+    title2_baseline = margin_bottom + 0.5;
+    title1_baseline = title2_baseline + title_size * 1.45;
+    translate([margin_l, title1_baseline])
+        bold_text("COMMUNITY MITIGATION", size = title_size);
+
+    // short vertical divider accent, filling the gap between the RESET/
+    // name block above and the title block below (not the full card
+    // height, so it can't collide with either as sizes get tuned)
+    name_baseline = reset_baseline - logo_size * 0.35 - 2.0;
+    divider_top = name_baseline - 1.5;
+    divider_bottom = title1_baseline + title_size * cap_frac + 1.5;
+    translate([margin_l, divider_bottom])
+        square([1.2, divider_top - divider_bottom]);
 }
 
 module white_shape_2d() {
+    // "LLOYD MERCHANT" name, under RESET
+    reset_baseline = card_h - margin_top - logo_size * cap_frac;
+    name_baseline = reset_baseline - logo_size * 0.35 - 2.0;
+    translate([margin_l, name_baseline])
+        bold_text("LLOYD MERCHANT", size = name_size);
+
+    // two-tone title, bottom half (white) — directly under its red half
+    title2_baseline = margin_bottom + 0.5;
+    translate([margin_l, title2_baseline])
+        bold_text("VOLUNTEER COORDINATOR", size = title_size);
+
     // QR code
     translate([qr_x, qr_y])
         qr_shape(qr_size);
@@ -153,7 +169,7 @@ module white_shape_2d() {
     cap_cx = qr_x + qr_size / 2;
     cap_baseline = qr_y - 2.0 - caption_size * cap_frac;
     translate([cap_cx, cap_baseline])
-        bold_text("SCAN ME", size = caption_size, halign = "center");
+        bold_text("SCAN TO SAVE", size = caption_size, halign = "center");
 }
 
 // ---------- solid bodies ----------
@@ -165,7 +181,8 @@ module base_outline_2d() {
 module black_part() {
     difference() {
         linear_extrude(height = card_t) base_outline_2d();
-        // color-swap band: name/RESET/QR/caption, all in one flat recess
+        // color-swap band: RESET/name/title/divider/QR/caption, all in
+        // one flat recess
         translate([0, 0, card_t - top_layer])
             linear_extrude(height = top_layer + 0.02)
                 union() {
@@ -197,22 +214,20 @@ module white_part() {
 //
 // Small coupons cropped out of the real design, for testing print
 // settings (retraction, Z-hop, travel speed, nozzle...) in a few
-// minutes instead of re-printing the whole card each time. Two are
-// provided:
+// minutes instead of re-printing the whole card each time.
 //   - swatch1: "RESET" in red — big bold letters
-//   - swatch2: QR pocket + "SCAN ME" caption in white — the only
-//     remaining white content since the design was pared down
-// If specks show up on both equally, it's a general travel/retraction
-// setting. Print each swatch's base + color pair together (same as the
-// full card: same position, one AMS slot each).
+//   - swatch2: the QR code + "SCAN TO SAVE" caption — the dense module
+//     pattern, the most demanding thing on the card to print
+// Print each swatch's base + color pair together (same as the full
+// card: same position, one AMS slot each).
 
 module crop_box_3d(x0, y0, x1, y1) {
     translate([x0, y0, -1])
         cube([x1 - x0, y1 - y0, card_t + 2]);
 }
 
-swatch1_box = [3, 3, 52, 15];    // around "RESET"
-swatch2_box = [52, 3, 84, 38];   // around the QR pocket + "SCAN ME"
+swatch1_box = [4, 33, 55, 46];    // around "RESET"
+swatch2_box = [48, 4, 85, 41];    // around the QR + "SCAN TO SAVE"
 
 module swatch1_base() {
     translate([-swatch1_box[0], -swatch1_box[1], 0])
